@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="content-section" style="max-width:420px;margin:24px auto;padding:20px;background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.06);">
+    <h2 style="margin-bottom:16px;">Login</h2>
+
+    {% if messages %}
+        <ul class="messages" style="margin-bottom:12px;">
+            {% for message in messages %}
+                <li style="color: {% if message.tags %}{{ message.tags }}{% else %}#333{% endif %};">{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="error" style="color:#dc3545;margin-bottom:12px;">
+                {{ form.non_field_errors }}
+            </div>
+        {% endif %}
+
+        {{ form.as_p }}
+
+        {% if next %}
+            <input type="hidden" name="next" value="{{ next }}">
+        {% endif %}
+
+        <div class="form-group" style="margin-top:12px;">
+            <button class="btn btn-outline-info" type="submit" style="padding:8px 14px;background:#0084ff;color:#fff;border:none;border-radius:4px;cursor:pointer;">
+                Login
+            </button>
+
+            <small class="text-muted" style="margin-left:12px;">
+                <a href="{% url 'password_reset' %}">Forgot Password?</a>
+            </small>
+        </div>
+    </form>
+</div>
+{% endblock content %}

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Django Realtime Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .auth-section, .chat-section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .hidden { display: none; }
+        h2 { margin-bottom: 15px; color: #333; }
+        h3 { margin-bottom: 10px; margin-top: 15px; color: #555; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; color: #555; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .button-group { display: flex; gap: 10px; margin-bottom: 15px; }
+        button { padding: 10px 20px; background: #0084ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 10px; margin-top: 5px; }
+        button:hover { background: #0073e6; }
+        button.secondary { background: #6c757d; }
+        button.secondary:hover { background: #5a6268; }
+        .link-button { background: transparent; color: #0084ff; border: none; padding: 6px 8px; cursor: pointer; text-decoration: underline; font-size: 14px; }
+        .error { color: #dc3545; font-size: 12px; margin-top: 5px; }
+        .success { color: #28a745; font-size: 12px; margin-top: 5px; }
+        /* Chat layout styles below (unchanged) */
+        .conversations-list { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px; }
+        .conversation-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .conversation-item:hover { background: #f8f9fa; }
+        .conversation-item.active { background: #e3f2fd; }
+        .chat-container { display: grid; grid-template-columns: 300px 1fr; gap: 20px; height: 600px; }
+        .chat-box { border: 1px solid #ddd; border-radius: 4px; display: flex; flex-direction: column; }
+        .messages-container { flex: 1; overflow-y: auto; padding: 15px; background: #f8f9fa; }
+        .message { margin-bottom: 15px; padding: 10px; border-radius: 8px; max-width: 70%; }
+        .message.sent { background: #0084ff; color: white; margin-left: auto; }
+        .message.received { background: white; border: 1px solid #ddd; }
+        .message-sender { font-weight: bold; font-size: 12px; margin-bottom: 5px; }
+        .message-time { font-size: 11px; opacity: 0.7; margin-top: 5px; }
+        .message-input-container { padding: 15px; border-top: 1px solid #ddd; background: white; }
+        .message-input-container textarea { resize: none; margin-bottom: 10px; }
+        .typing-indicator { padding: 10px 15px; font-size: 12px; font-style: italic; color: #666; background: #f0f2f5; }
+        .user-info { padding: 15px; background: #e3f2fd; border-radius: 4px; margin-bottom: 15px; }
+        .status-indicator { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+        .status-online { background: #28a745; }
+        .status-offline { background: #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Auth Section -->
+        <div id="authSection" class="auth-section">
+            <h2>Authentication</h2>
+
+            <div class="button-group">
+                <button onclick="showLogin()">Login</button>
+                <button onclick="showRegister()">Register</button>
+            </div>
+
+            <!-- Login Form -->
+            <div id="loginForm" class="hidden">
+                <h3>Login</h3>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="loginEmail" placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" id="loginPassword">
+                </div>
+
+                <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+                    <button onclick="login()">Login</button>
+
+                    <!-- Forgot password button navigates to Django password reset page -->
+                    <button type="button" class="link-button" onclick="openPasswordReset()">Forgot password?</button>
+                </div>
+
+                <div id="loginError" class="error"></div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="hidden">
+                <h3>Register</h3>
+                <div class="form-group">
+                    <label>Email:</label>
+                    <input type="email" id="registerEmail" placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label>Username:</label>
+                    <input type="text" id="registerUsername">
+                </div>
+                <div class="form-group">
+                    <label>First Name:</label>
+                    <input type="text" id="registerFirstName">
+                </div>
+                <div class="form-group">
+                    <label>Last Name:</label>
+                    <input type="text" id="registerLastName">
+                </div>
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" id="registerPassword">
+                </div>
+                <div class="form-group">
+                    <label>Confirm Password:</label>
+                    <input type="password" id="registerPasswordConfirm">
+                </div>
+                <button onclick="register()">Register</button>
+                <div id="registerError" class="error"></div>
+            </div>
+        </div>
+
+        <!-- Chat Section -->
+        <div id="chatSection" class="chat-section hidden">
+            <div class="user-info">
+                <span class="status-indicator status-online"></span>
+                <strong id="currentUser"></strong>
+                <button onclick="logout()" class="secondary" style="float: right;">Logout</button>
+            </div>
+
+            <h2>Chat Application</h2>
+
+            <!-- Create Conversation -->
+            <div style="margin-bottom: 20px;">
+                <h3>Create New Conversation</h3>
+                <div class="form-group">
+                    <label>Type:</label>
+                    <select id="conversationType" onchange="toggleGroupFields()">
+                        <option value="private">Private Chat</option>
+                        <option value="group">Group Chat</option>
+                    </select>
+                </div>
+                <div id="groupNameField" class="form-group hidden">
+                    <label>Group Name:</label>
+                    <input type="text" id="groupName">
+                </div>
+                <div class="form-group">
+                    <label>Select User(s):</label>
+                    <select id="userSelect" multiple size="5"></select>
+                </div>
+                <button onclick="createConversation()">Create Conversation</button>
+                <div id="createConvError" class="error"></div>
+            </div>
+
+            <!-- Chat Container -->
+            <div class="chat-container">
+                <!-- Conversations List -->
+                <div>
+                    <h3>Conversations</h3>
+                    <div id="conversationsList" class="conversations-list"></div>
+                </div>
+
+                <!-- Chat Box -->
+                <div class="chat-box">
+                    <div id="chatHeader" style="padding: 15px; border-bottom: 1px solid #ddd; background: white;">
+                        <h3>Select a conversation</h3>
+                    </div>
+                    <div id="messagesContainer" class="messages-container"></div>
+                    <div id="typingIndicator" class="typing-indicator hidden"></div>
+                    <div class="message-input-container">
+                        <textarea id="messageInput" rows="3" placeholder="Type a message..." disabled></textarea>
+                        <button id="sendButton" onclick="sendMessage()" disabled>Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let accessToken = null;
+        let refreshToken = null;
+        let currentUser = null;
+        let currentConversation = null;
+        let chatSocket = null;
+        let typingTimeout = null;
+
+        const API_BASE = window.location.origin + '/api';
+
+        // navigate to Django's password reset page (uses URL name 'password_reset')
+        function openPasswordReset() {
+            window.location.href = "{% url 'password_reset' %}";
+        }
+
+        // Auth Functions
+        function showLogin() {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+        }
+
+        function showRegister() {
+            document.getElementById('registerForm').classList.remove('hidden');
+            document.getElementById('loginForm').classList.add('hidden');
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/login/`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, password})
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    accessToken = data.tokens.access;
+                    refreshToken = data.tokens.refresh;
+                    currentUser = data.user;
+                    showChatSection();
+                } else {
+                    document.getElementById('loginError').textContent = JSON.stringify(data);
+                }
+            } catch (error) {
+                document.getElementById('loginError').textContent = 'Login failed: ' + error.message;
+            }
+        }
+
+        async function register() {
+            const email = document.getElementById('registerEmail').value;
+            const username = document.getElementById('registerUsername').value;
+            const first_name = document.getElementById('registerFirstName').value;
+            const last_name = document.getElementById('registerLastName').value;
+            const password = document.getElementById('registerPassword').value;
+            const password_confirm = document.getElementById('registerPasswordConfirm').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/register/`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, username, first_name, last_name, password, password_confirm})
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    accessToken = data.tokens.access;
+                    refreshToken = data.tokens.refresh;
+                    currentUser = data.user;
+                    showChatSection();
+                } else {
+                    document.getElementById('registerError').textContent = JSON.stringify(data);
+                }
+            } catch (error) {
+                document.getElementById('registerError').textContent = 'Registration failed: ' + error.message;
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetch(`${API_BASE}/auth/logout/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({refresh_token: refreshToken})
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+
+            if (chatSocket) { chatSocket.close(); }
+
+            accessToken = null;
+            refreshToken = null;
+            currentUser = null;
+            currentConversation = null;
+
+            document.getElementById('authSection').classList.remove('hidden');
+            document.getElementById('chatSection').classList.add('hidden');
+        }
+
+        function showChatSection() {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('chatSection').classList.remove('hidden');
+            document.getElementById('currentUser').textContent = currentUser.email;
+            loadUsers();
+            loadConversations();
+        }
+
+        // Chat helper functions follow (unchanged)...
+        async function loadUsers() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/users/`, {
+                    headers: {'Authorization': `Bearer ${accessToken}`}
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    const select = document.getElementById('userSelect');
+                    select.innerHTML = '';
+                    data.users.forEach(user => {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        option.textContent = `${user.username} (${user.email})`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) { console.error('Load users error:', error); }
+        }
+
+        async function loadConversations() {
+            try {
+                const response = await fetch(`${API_BASE}/chat/conversations/`, {
+                    headers: {'Authorization': `Bearer ${accessToken}`}
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    const list = document.getElementById('conversationsList');
+                    list.innerHTML = '';
+                    data.conversations.forEach(conv => {
+                        const item = document.createElement('div');
+                        item.className = 'conversation-item';
+                        item.onclick = () => selectConversation(conv.id);
+                        let name = conv.type === 'group' ? conv.name : (conv.other_user ? conv.other_user.username : 'Unknown');
+                        item.innerHTML = `
+                            <div>
+                                <strong>${name}</strong>
+                                <div style="font-size: 12px; color: #666;">
+                                    ${conv.last_message ? conv.last_message.content.substring(0, 30) + '...' : 'No messages'}
+                                </div>
+                            </div>
+                            ${conv.unread_count > 0 ? `<span style="background: #0084ff; color: white; border-radius: 50%; padding: 2px 8px; font-size: 12px;">${conv.unread_count}</span>` : ''}
+                        `;
+                        list.appendChild(item);
+                    });
+                }
+            } catch (error) { console.error('Load conversations error:', error); }
+        }
+
+        function toggleGroupFields() {
+            const type = document.getElementById('conversationType').value;
+            const groupNameField = document.getElementById('groupNameField');
+            if (type === 'group') groupNameField.classList.remove('hidden'); else groupNameField.classList.add('hidden');
+        }
+
+        async function createConversation() {
+            const type = document.getElementById('conversationType').value;
+            const name = document.getElementById('groupName').value;
+            const userSelect = document.getElementById('userSelect');
+            const participant_ids = Array.from(userSelect.selectedOptions).map(opt => parseInt(opt.value));
+            try {
+                const response = await fetch(`${API_BASE}/chat/conversations/create/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+                    body: JSON.stringify({type, name, participant_ids})
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    document.getElementById('createConvError').textContent = '';
+                    document.getElementById('createConvError').className = 'success';
+                    document.getElementById('createConvError').textContent = 'Conversation created!';
+                    loadConversations();
+                    document.getElementById('groupName').value = '';
+                    userSelect.selectedIndex = -1;
+                } else {
+                    document.getElementById('createConvError').className = 'error';
+                    document.getElementById('createConvError').textContent = JSON.stringify(data);
+                }
+            } catch (error) {
+                document.getElementById('createConvError').className = 'error';
+                document.getElementById('createConvError').textContent = 'Create failed: ' + error.message;
+            }
+        }
+
+        async function selectConversation(conversationId) {
+            currentConversation = conversationId;
+            document.querySelectorAll('.conversation-item').forEach(item => item.classList.remove('active'));
+            event.target.closest('.conversation-item').classList.add('active');
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('sendButton').disabled = false;
+            await loadMessages(conversationId);
+            connectWebSocket(conversationId);
+        }
+
+        async function loadMessages(conversationId) {
+            try {
+                const response = await fetch(`${API_BASE}/chat/conversations/${conversationId}/messages/`, {
+                    headers: {'Authorization': `Bearer ${accessToken}`}
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    const container = document.getElementById('messagesContainer');
+                    container.innerHTML = '';
+                    data.messages.reverse().forEach(msg => displayMessage(msg));
+                    container.scrollTop = container.scrollHeight;
+                    await fetch(`${API_BASE}/chat/conversations/${conversationId}/mark-read/`, {
+                        method: 'POST',
+                        headers: {'Authorization': `Bearer ${accessToken}`}
+                    });
+                }
+            } catch (error) { console.error('Load messages error:', error); }
+        }
+
+        function connectWebSocket(conversationId) {
+            if (chatSocket) chatSocket.close();
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/chat/${conversationId}/`;
+            chatSocket = new WebSocket(wsUrl);
+            chatSocket.onopen = () => console.log('WebSocket connected');
+            chatSocket.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'chat_message') {
+                    displayMessage(data.message);
+                    const container = document.getElementById('messagesContainer');
+                    container.scrollTop = container.scrollHeight;
+                } else if (data.type === 'typing') {
+                    handleTypingIndicator(data);
+                }
+            };
+            chatSocket.onclose = () => console.log('WebSocket disconnected');
+        }
+
+        function displayMessage(message) {
+            const container = document.getElementById('messagesContainer');
+            const div = document.createElement('div');
+            div.className = `message ${message.sender.id === currentUser.id ? 'sent' : 'received'}`;
+            const time = new Date(message.created_at).toLocaleTimeString();
+            div.innerHTML = `
+                ${message.sender.id !== currentUser.id ? `<div class="message-sender">${message.sender.username}</div>` : ''}
+                <div>${message.content}</div>
+                <div class="message-time">${time}</div>
+            `;
+            container.appendChild(div);
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+            if (content && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(JSON.stringify({ type: 'chat_message', content: content }));
+                input.value = '';
+                stopTyping();
+            }
+        }
+
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        });
+
+        document.getElementById('messageInput').addEventListener('input', () => {
+            if (chatSocket && chatSocket.readyState === WebSocket.OPEN) startTyping();
+        });
+
+        function startTyping() {
+            chatSocket.send(JSON.stringify({ type: 'typing', is_typing: true }));
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(stopTyping, 3000);
+        }
+
+        function stopTyping() {
+            if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(JSON.stringify({ type: 'typing', is_typing: false }));
+            }
+        }
+
+        function handleTypingIndicator(data) {
+            const indicator = document.getElementById('typingIndicator');
+            if (data.is_typing) {
+                indicator.textContent = `${data.username} is typing...`;
+                indicator.classList.remove('hidden');
+            } else {
+                indicator.classList.add('hidden');
+            }
+        }
+
+        // Initialize: show login by default
+        showLogin();
+    </script>
+</body>
+</html>
